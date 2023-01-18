@@ -1,0 +1,30 @@
+---
+title: "GitHubRintro"
+author: "Libby Mojica"
+date: "2023-01-18"
+output: html_document
+---
+#Course information
+https://github.com/Data-Sci-Intro-2023/Week-1-Intro/blob/main/lessons/intro-basics.md
+Video: https://www.youtube.com/watch?v=l3-xEn1KQxY&t=929s
+
+```{r}
+source("setup.R")
+```
+
+```{r}
+data("penguins")
+
+penguins
+```
+
+# Data types
+vector - character, 1 dimensional
+list - 1 dimensional
+matrix - 2 dimensional
+
+```{r}
+class(penguins)
+str(penguins)
+```
+
