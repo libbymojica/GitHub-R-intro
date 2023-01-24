@@ -1,0 +1,265 @@
+---
+title: "Week1, Day 2 Spatial Data"
+author: "Libby Mojica"
+date: "2023-01-20"
+output:
+  html_document: default
+editor_options:
+  markdown:
+    wrap: 72
+  chunk_output_type: inline
+---
+
+#```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+#```
+
+# Intro to Spatial Data in R
+
+Video <https://www.youtube.com/watch?v=T3M40tbbFwg> lesson
+<https://github.com/Data-Sci-Intro-2023/Week-1-Intro/blob/main/lessons/intro-spatial.md>
+
+# 2. Import and manipulate spatial data
+
+```{r setup}
+source("setup.R")
+```
+
+## 2.1 Vector Data with tigris and tmap
+
+### tigris
+
+import Colorado counties with tigris
+
+```{r}
+counties <- counties(state = "CO")
+```
+
+import roads in Larimer county limit what data we call because large
+amount of data
+
+```{r}
+
+roads <- roads(state = "CO", county = "Larimer")
+```
+
+### tmap
+
+Set tmap mode to interactive viewing
+
+```{r}
+tmap_mode("view")
+```
+
+Quick thematic map
+
+```{r}
+qtm(counties)
+```
+
+We can click on polygons on map in viewer to see details. For a more
+detailed map use tm_shape instead of qtm. It's a better method to create
+customized maps.
+
+```{r}
+tm_shape(counties)+ 
+  tm_polygons()
+```
+
+Quick thematic map:
+
+```{r}
+qtm(counties)+
+  qtm(roads)
+```
+
+Look at the class of counties
+
+```{r}
+class(counties)
+```
+
+### sf
+
+sf (simple features) is a package to work with vector data, adds a
+geometry column
+
+Filter road data set for only Poudre Canyon Hwy
+
+```{r}
+poudre_hwy <- roads %>% 
+  filter(FULLNAME == "Poudre Canyon Hwy")
+qtm(poudre_hwy)
+```
+
+### Points
+
+When we create poudre_points object it has no spatial information (if
+you look at class(poudre_points) it returns "data.frame")
+
+```{r}
+poudre_points <- data.frame(name = c("Mishawaka", "Rustic", "Blue Lake Trailhead"),
+                            long = c(-105.35634, -105.58159, -105.85563),
+                            lat = c(40.68752, 40.69687, 40.57960))
+```
+
+Convert to spatial coordinate reference system WGS 1984 is crs = 4326
+
+```{r}
+poudre_points_sf <- st_as_sf(poudre_points, coords = c("long", "lat"), crs = 4326)
+poudre_points_sf
+```
+
+View on map
+
+```{r}
+qtm(poudre_hwy)+
+  qtm(poudre_points_sf)
+```
+
+## 2.2 Raster data
+
+elevatr package, imports raster dem z specifies the zoom level, or
+resolution of the raster, z = 7 is 1 km resolution
+
+```{r}
+elevation <- get_elev_raster(counties, z = 7)
+elevation
+qtm(elevation)
+```
+
+change elevation display continuous palette for map symbol add more
+informative legend title looks more gradual symbols because continuous
+elevation
+
+```{r}
+tm_shape(elevation)+
+  tm_raster(style = "cont", title = "Elevation (m)")
+```
+
+### terra package
+
+Raster data management package, but only if we convert to a terra raster
+object Converts data from "RasterLayer" to "SpatRaster"
+
+```{r}
+# Now data in terra format as a SpatRaster we can use terra functions
+elevation <- rast(elevation)
+elevation
+```
+
+Update the name of the file
+
+```{r}
+names(elevation) <- "Elevation"
+elevation
+```
+
+### Coordinate Reference Systems
+
+Check projection with st_crs function we find this data set in NAD83
+
+```{r}
+st_crs(counties)
+```
+
+Check if two data sets are in same projection returns false, so need to
+reproject one of the datasets
+
+```{r}
+crs(counties) == crs(elevation)
+```
+
+To reproject elevation layer to match counties
+
+```{r}
+elevation_prj <- terra::project(elevation, counties)
+```
+
+Now that both datasets in same projection we can crop elevation to match
+the county boundary 
+then crop elevation to Colorado counties extent
+
+```{r}
+elevation_crop <- crop(elevation, ext(counties))
+qtm(elevation_crop)
+```
+
+# 3.Read and write spatial data
+## 3.1 Writing spatial data
+Save sf or vector data
+
+```{r}
+# write_sf(counties, append = FALSE, "data/counties.shp")
+write_sf(poudre_hwy, append = FALSE,  "data/poudre_hwy.shp")
+write_sf(poudre_points_sf, append = FALSE, "data/poudre_points.shp")
+```
+
+Save raster data
+
+```{r}
+writeRaster(elevation_crop,  overwrite=TRUE, "data/elevation_larimer.tif")
+```
+
+## 3.2 Save RData files
+
+```{r}
+save(poudre_hwy, poudre_points_sf, file = "data/spatial_objects.RData")
+```
+
+Test removing and reloading spatial objects saved as RData file
+
+```{r}
+#rm(poudre_hwy, poudre_points_sf)
+#load("data/spatial_objects.RData")
+```
+
+# 4. Exercises
+
+Filter out the counties data set to only include counties:
+Larimer, Denver, and Pueblo.
+```{r}
+counties %>%
+ filter(NAME == 'Larimer'|NAME =='Denver'|NAME =='Pueblo')
+```
+
+Make a map of the counties data colored by county area. Make a second map of counties colored by their total area of water.
+```{r}
+#Combine area land and area water to make total county area field
+#then map total county area
+counties %>%
+  mutate(Area_total = ALAND + AWATER) %>% 
+  ggplot(.) +
+  geom_sf(aes(fill = Area_total))
+```
+
+```{r}
+#Map counties by total water area
+counties %>%
+    ggplot(.) +
+  geom_sf(aes(fill = AWATER))
+```
+
+
+Make a barplot comparing the elevation of your 3 points in the Poudre Canyon (note: explore the extract() function in the terra package).
+```{r}
+#create a new column that adds the elevation for each point
+poudre_points_sf$pt_elev <- terra::extract(elevation, vect(poudre_points_sf))[,2]
+```
+
+Then plot elevation on a barplot
+```{r}
+poudre_points_sf %>% 
+  ggplot() +
+  geom_col(mapping = aes(x = name, y = pt_elev)) + 
+  ylab("Elevation") + xlab("Location")
+```
+
+Why are there 4 features in our Poudre Canyon Highway variable instead of 1?
+```{r}
+#There are 4 segments of the road saved in the roads data set. You can see them plotted by column LINEARID
+tm_shape(poudre_hwy)+
+  tm_lines(col = "LINEARID")
+
+```
+
